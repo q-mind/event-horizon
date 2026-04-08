@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cognitive Doomsday Clock</title>
+<meta name="description" content="The Cognitive Doomsday Clock — tracking the erosion of human cognitive independence in the AI era.">
+<meta property="og:title" content="The Cognitive Doomsday Clock">
+<meta property="og:description" content="The clock doesn't strike midnight. It simply becomes unreadable.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#060606">
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -14,7 +19,9 @@
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-font-smoothing: antialiased;
+    animation: fadeIn 1s ease forwards;
   }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
   /* ── Layer 0: Space background ── */
   #space-canvas {
@@ -267,6 +274,19 @@
   }
   .ending-space {
     min-height: 100vh;
+  }
+
+  .scroll-hint {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    color: rgba(160,120,60,0.3);
+    z-index: 5;
+    transition: opacity 1s;
+    pointer-events: none;
   }
 </style>
 </head>
@@ -804,6 +824,7 @@
     <div class="ending-space"></div>
   </section>
 
+  <div class="scroll-hint" id="scrollHint">&#8595; scroll or press arrow keys</div>
 </div>
 
 <script>
@@ -828,8 +849,10 @@ let shockwaveAlpha = 0;
 // ═══════════════════════════════════════════
 let audioCtx = null;
 let reverbBuffer = null;
+let tickSampleBuffer = null;
+let useMP3 = false;
 
-function initAudio() {
+async function initAudio() {
   if (audioCtx) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     return;
@@ -850,11 +873,42 @@ function initAudio() {
     }
   }
   reverbBuffer = impulse;
+
+  try {
+    const resp = await fetch('tick.mp3');
+    if (resp.ok) {
+      const buf = await resp.arrayBuffer();
+      const decoded = await audioCtx.decodeAudioData(buf);
+      // Extract one tick: 7s to 8.2s (with reverb tail fade-out)
+      const rate = decoded.sampleRate;
+      const start = Math.floor(rate * 7);
+      const end = Math.floor(rate * 8.2);
+      tickSampleBuffer = audioCtx.createBuffer(decoded.numberOfChannels, end - start, rate);
+      for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+        const src = decoded.getChannelData(ch);
+        const dst = tickSampleBuffer.getChannelData(ch);
+        for (let i = 0; i < dst.length; i++) {
+          const fadeStart = dst.length - Math.floor(rate * 0.3);
+          const fade = i > fadeStart ? 1 - (i - fadeStart) / (dst.length - fadeStart) : 1;
+          dst[i] = src[start + i] * fade;
+        }
+      }
+      useMP3 = true;
+    }
+  } catch(e) { /* fall back to synth */ }
 }
 
-function playTick() {
-  initAudio();
+async function playTick() {
+  await initAudio();
   if (!audioCtx) return;
+
+  if (useMP3 && tickSampleBuffer) {
+    const src = audioCtx.createBufferSource();
+    src.buffer = tickSampleBuffer;
+    src.connect(audioCtx.destination);
+    src.start();
+    return;
+  }
 
   const now = audioCtx.currentTime;
 
@@ -980,6 +1034,9 @@ function minuteToAngle(m) {
 // SCROLL / NAVIGATION
 // ═══════════════════════════════════════════
 function scrollToSection(idx) {
+  const hint = document.getElementById('scrollHint');
+  if (hint) hint.style.opacity = '0';
+
   if (idx < 0 || idx >= totalSections) return;
   if (scrollLocked) return;
 
