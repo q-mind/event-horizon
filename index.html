@@ -806,5 +806,707 @@
 
 </div>
 
+<script>
+// ═══════════════════════════════════════════
+// GLOBALS
+// ═══════════════════════════════════════════
+const sections = document.querySelectorAll('[data-section]');
+const totalSections = sections.length;
+let currentSection = 0;
+let scrollLocked = false;
+const SCROLL_DELAY = 1000;
+
+// Clock state
+let clockHandAngle = minuteToAngle(40); // start at first era's minute
+let clockTargetAngle = minuteToAngle(40);
+let clockGlowIntensity = 0.5;
+let shockwaveRadius = 0;
+let shockwaveAlpha = 0;
+
+// ═══════════════════════════════════════════
+// AUDIO — Echoing hall clock tick (synthesized)
+// ═══════════════════════════════════════════
+let audioCtx = null;
+let reverbBuffer = null;
+
+function initAudio() {
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return;
+  }
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  const rate = audioCtx.sampleRate;
+  const length = Math.floor(rate * 3.5);
+  const impulse = audioCtx.createBuffer(2, length, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = impulse.getChannelData(ch);
+    for (let i = 0; i < length; i++) {
+      const t = i / length;
+      const earlyDecay = Math.exp(-t * 8) * 0.6;
+      const lateDecay = Math.exp(-t * 2.5) * 0.4;
+      data[i] = (Math.random() * 2 - 1) * (earlyDecay + lateDecay);
+    }
+  }
+  reverbBuffer = impulse;
+}
+
+function playTick() {
+  initAudio();
+  if (!audioCtx) return;
+
+  const now = audioCtx.currentTime;
+
+  const convolver = audioCtx.createConvolver();
+  convolver.buffer = reverbBuffer;
+  const wetGain = audioCtx.createGain();
+  wetGain.gain.value = 0.45;
+  convolver.connect(wetGain);
+  wetGain.connect(audioCtx.destination);
+
+  const dryGain = audioCtx.createGain();
+  dryGain.gain.value = 0.55;
+  dryGain.connect(audioCtx.destination);
+
+  function send(node) {
+    node.connect(dryGain);
+    node.connect(convolver);
+  }
+
+  // Mechanical click
+  const clickLen = 0.006;
+  const clickBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * clickLen, audioCtx.sampleRate);
+  const cd = clickBuf.getChannelData(0);
+  for (let i = 0; i < cd.length; i++) {
+    cd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / cd.length, 10);
+  }
+  const clickSrc = audioCtx.createBufferSource();
+  clickSrc.buffer = clickBuf;
+  const clickBP = audioCtx.createBiquadFilter();
+  clickBP.type = 'bandpass';
+  clickBP.frequency.value = 3500;
+  clickBP.Q.value = 2.5;
+  const clickG = audioCtx.createGain();
+  clickG.gain.value = 0.9;
+  clickSrc.connect(clickBP);
+  clickBP.connect(clickG);
+  send(clickG);
+  clickSrc.start(now);
+
+  // Wood body knock
+  const knockLen = 0.015;
+  const knockBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * knockLen, audioCtx.sampleRate);
+  const kd = knockBuf.getChannelData(0);
+  for (let i = 0; i < kd.length; i++) {
+    kd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / kd.length, 5);
+  }
+  const knockSrc = audioCtx.createBufferSource();
+  knockSrc.buffer = knockBuf;
+  const knockBP = audioCtx.createBiquadFilter();
+  knockBP.type = 'bandpass';
+  knockBP.frequency.value = 1200;
+  knockBP.Q.value = 3;
+  const knockG = audioCtx.createGain();
+  knockG.gain.value = 0.12;
+  knockSrc.connect(knockBP);
+  knockBP.connect(knockG);
+  send(knockG);
+  knockSrc.start(now);
+
+  // Low thud
+  const thud = audioCtx.createOscillator();
+  thud.type = 'sine';
+  thud.frequency.setValueAtTime(70, now);
+  thud.frequency.exponentialRampToValueAtTime(35, now + 0.5);
+  const thudG = audioCtx.createGain();
+  thudG.gain.setValueAtTime(0.04, now);
+  thudG.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+  thud.connect(thudG);
+  thudG.connect(dryGain);
+  thud.start(now);
+  thud.stop(now + 0.7);
+
+  // Echo taps
+  const tap1 = audioCtx.createDelay();
+  tap1.delayTime.value = 0.08;
+  const tap1G = audioCtx.createGain();
+  tap1G.gain.value = 0.15;
+  const tap1LP = audioCtx.createBiquadFilter();
+  tap1LP.type = 'lowpass';
+  tap1LP.frequency.value = 3000;
+
+  const tap2 = audioCtx.createDelay();
+  tap2.delayTime.value = 0.18;
+  const tap2G = audioCtx.createGain();
+  tap2G.gain.value = 0.08;
+  const tap2LP = audioCtx.createBiquadFilter();
+  tap2LP.type = 'lowpass';
+  tap2LP.frequency.value = 2000;
+
+  dryGain.connect(tap1);
+  tap1.connect(tap1LP);
+  tap1LP.connect(tap1G);
+  tap1G.connect(audioCtx.destination);
+
+  dryGain.connect(tap2);
+  tap2.connect(tap2LP);
+  tap2LP.connect(tap2G);
+  tap2G.connect(audioCtx.destination);
+
+  setTimeout(() => {
+    convolver.disconnect(); wetGain.disconnect(); dryGain.disconnect();
+    tap1.disconnect(); tap1G.disconnect(); tap1LP.disconnect();
+    tap2.disconnect(); tap2G.disconnect(); tap2LP.disconnect();
+  }, 5000);
+}
+
+// Init audio on first interaction
+['wheel', 'keydown', 'touchstart'].forEach(evt => {
+  window.addEventListener(evt, function audioInit() {
+    initAudio();
+    window.removeEventListener(evt, audioInit);
+  }, { once: true });
+});
+
+// ═══════════════════════════════════════════
+// CLOCK MATH
+// ═══════════════════════════════════════════
+function minuteToAngle(m) {
+  return ((m / 60) * Math.PI * 2) - Math.PI / 2;
+}
+
+// ═══════════════════════════════════════════
+// SCROLL / NAVIGATION
+// ═══════════════════════════════════════════
+function scrollToSection(idx) {
+  if (idx < 0 || idx >= totalSections) return;
+  if (scrollLocked) return;
+
+  currentSection = idx;
+  scrollLocked = true;
+
+  sections[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // Add visible class
+  sections[idx].classList.add('visible');
+
+  // Read data-minute and set clock target
+  const minute = sections[idx].getAttribute('data-minute');
+  if (minute) {
+    clockTargetAngle = minuteToAngle(parseFloat(minute));
+  }
+
+  // Increase glow intensity
+  clockGlowIntensity = Math.min(1.0, clockGlowIntensity + 0.05);
+
+  // Trigger shockwave
+  shockwaveAlpha = 0.6;
+  shockwaveRadius = 0;
+
+  // Flash pulse overlay
+  const pulse = document.getElementById('pulse-overlay');
+  pulse.style.opacity = '1';
+  setTimeout(() => { pulse.style.opacity = '0'; }, 120);
+
+  // Play tick audio
+  playTick();
+
+  // Unlock after delay
+  setTimeout(() => { scrollLocked = false; }, SCROLL_DELAY);
+}
+
+// Wheel
+window.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (scrollLocked) return;
+  if (e.deltaY > 0) scrollToSection(currentSection + 1);
+  else if (e.deltaY < 0) scrollToSection(currentSection - 1);
+}, { passive: false });
+
+// Keyboard
+window.addEventListener('keydown', (e) => {
+  if (scrollLocked) return;
+  if (e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {
+    e.preventDefault();
+    scrollToSection(currentSection + 1);
+  } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+    e.preventDefault();
+    scrollToSection(currentSection - 1);
+  }
+});
+
+// Touch
+let touchStartY = 0;
+window.addEventListener('touchstart', (e) => {
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+window.addEventListener('touchend', (e) => {
+  if (scrollLocked) return;
+  const dy = touchStartY - e.changedTouches[0].clientY;
+  if (Math.abs(dy) > 50) {
+    if (dy > 0) scrollToSection(currentSection + 1);
+    else scrollToSection(currentSection - 1);
+  }
+}, { passive: true });
+
+// ═══════════════════════════════════════════
+// INTERSECTION OBSERVER (visibility only)
+// ═══════════════════════════════════════════
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.3 });
+
+sections.forEach(s => observer.observe(s));
+
+// Make first section visible immediately
+setTimeout(() => { sections[0].classList.add('visible'); }, 100);
+
+// ═══════════════════════════════════════════
+// SPACE BACKGROUND
+// ═══════════════════════════════════════════
+const spaceCanvas = document.getElementById('space-canvas');
+const sCtx = spaceCanvas.getContext('2d');
+let sw, sh;
+
+// Stars
+const stars = [];
+function initStars() {
+  stars.length = 0;
+  for (let i = 0; i < 200; i++) {
+    stars.push({
+      x: Math.random() * sw,
+      y: Math.random() * sh,
+      r: Math.random() * 1.2 + 0.3,
+      baseAlpha: Math.random() * 0.4 + 0.1,
+      phase: Math.random() * Math.PI * 2,
+      speed: Math.random() * 2 + 1
+    });
+  }
+}
+
+function resizeSpace() {
+  sw = window.innerWidth;
+  sh = window.innerHeight;
+  spaceCanvas.width = sw;
+  spaceCanvas.height = sh;
+  initStars();
+}
+resizeSpace();
+window.addEventListener('resize', resizeSpace);
+
+function drawSpace(t) {
+  sCtx.clearRect(0, 0, sw, sh);
+
+  // Stars with sine-wave flicker
+  for (const star of stars) {
+    const flicker = star.baseAlpha + Math.sin(t * star.speed + star.phase) * 0.2;
+    const alpha = Math.max(0.05, Math.min(1, flicker));
+    sCtx.beginPath();
+    sCtx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+    sCtx.fillStyle = `rgba(220,215,200,${alpha})`;
+    sCtx.fill();
+  }
+
+  // Sun position
+  const sunX = sw * 0.12;
+  const sunY = sh * 0.1;
+
+  // Sun outer corona (280px)
+  const corona1 = sCtx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 280);
+  corona1.addColorStop(0, 'rgba(255,220,120,0.08)');
+  corona1.addColorStop(0.4, 'rgba(255,180,80,0.04)');
+  corona1.addColorStop(1, 'rgba(255,160,60,0)');
+  sCtx.fillStyle = corona1;
+  sCtx.fillRect(sunX - 300, sunY - 300, 600, 600);
+
+  // Sun mid corona (120px)
+  const corona2 = sCtx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 120);
+  corona2.addColorStop(0, 'rgba(255,230,160,0.2)');
+  corona2.addColorStop(0.5, 'rgba(255,200,100,0.08)');
+  corona2.addColorStop(1, 'rgba(255,180,60,0)');
+  sCtx.fillStyle = corona2;
+  sCtx.fillRect(sunX - 140, sunY - 140, 280, 280);
+
+  // Sun inner corona (40px)
+  const corona3 = sCtx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 40);
+  corona3.addColorStop(0, 'rgba(255,245,220,0.6)');
+  corona3.addColorStop(0.5, 'rgba(255,220,150,0.3)');
+  corona3.addColorStop(1, 'rgba(255,200,100,0)');
+  sCtx.fillStyle = corona3;
+  sCtx.fillRect(sunX - 50, sunY - 50, 100, 100);
+
+  // Sun disc (8px)
+  sCtx.beginPath();
+  sCtx.arc(sunX, sunY, 8, 0, Math.PI * 2);
+  sCtx.fillStyle = 'rgba(255,240,200,0.9)';
+  sCtx.fill();
+
+  // Earth
+  const earthX = sw * 0.5;
+  const earthY = sh * 0.5;
+  const earthR = Math.min(sw, sh) * 0.32;
+
+  sCtx.save();
+  sCtx.beginPath();
+  sCtx.arc(earthX, earthY, earthR, 0, Math.PI * 2);
+  sCtx.clip();
+
+  // Ocean
+  const ocean = sCtx.createRadialGradient(earthX, earthY, 0, earthX, earthY, earthR);
+  ocean.addColorStop(0, 'rgba(20,40,80,0.15)');
+  ocean.addColorStop(0.7, 'rgba(15,30,60,0.12)');
+  ocean.addColorStop(1, 'rgba(10,20,40,0.08)');
+  sCtx.fillStyle = ocean;
+  sCtx.fillRect(earthX - earthR, earthY - earthR, earthR * 2, earthR * 2);
+
+  // Continent blobs (very subtle green ellipses)
+  sCtx.fillStyle = 'rgba(40,70,35,0.07)';
+  // Africa-Europe
+  sCtx.beginPath();
+  sCtx.ellipse(earthX - earthR * 0.2, earthY - earthR * 0.15, earthR * 0.35, earthR * 0.25, -0.3, 0, Math.PI * 2);
+  sCtx.fill();
+  // Americas
+  sCtx.beginPath();
+  sCtx.ellipse(earthX + earthR * 0.3, earthY + earthR * 0.1, earthR * 0.2, earthR * 0.35, 0.4, 0, Math.PI * 2);
+  sCtx.fill();
+  // Asia
+  sCtx.beginPath();
+  sCtx.ellipse(earthX - earthR * 0.1, earthY + earthR * 0.4, earthR * 0.25, earthR * 0.15, 0.2, 0, Math.PI * 2);
+  sCtx.fill();
+
+  // Terminator (day/night gradient based on sun angle)
+  const angle = Math.atan2(sunY - earthY, sunX - earthX);
+  const tx1 = earthX + Math.cos(angle) * earthR;
+  const ty1 = earthY + Math.sin(angle) * earthR;
+  const tx2 = earthX - Math.cos(angle) * earthR;
+  const ty2 = earthY - Math.sin(angle) * earthR;
+  const terminator = sCtx.createLinearGradient(tx1, ty1, tx2, ty2);
+  terminator.addColorStop(0, 'rgba(0,0,0,0)');
+  terminator.addColorStop(0.45, 'rgba(0,0,0,0.05)');
+  terminator.addColorStop(0.55, 'rgba(0,0,0,0.2)');
+  terminator.addColorStop(1, 'rgba(0,0,0,0.35)');
+  sCtx.fillStyle = terminator;
+  sCtx.fillRect(earthX - earthR, earthY - earthR, earthR * 2, earthR * 2);
+
+  sCtx.restore();
+
+  // Atmosphere highlight arc (sun-facing side)
+  const atmAngle = Math.atan2(sunY - earthY, sunX - earthX);
+  sCtx.beginPath();
+  sCtx.arc(earthX, earthY, earthR + 2, atmAngle - 0.8, atmAngle + 0.8);
+  sCtx.strokeStyle = 'rgba(100,160,255,0.08)';
+  sCtx.lineWidth = 4;
+  sCtx.stroke();
+
+  sCtx.beginPath();
+  sCtx.arc(earthX, earthY, earthR + 1, atmAngle - 0.5, atmAngle + 0.5);
+  sCtx.strokeStyle = 'rgba(140,190,255,0.12)';
+  sCtx.lineWidth = 2;
+  sCtx.stroke();
+
+  // Atmosphere shrinking window
+  const launchYear = 2026;
+  const endYear = 2076;
+  const now = new Date();
+  const yearFraction = now.getFullYear() + (now.getMonth() / 12) + (now.getDate() / 365);
+  const windowPct = Math.max(0, Math.min(1, 1 - (yearFraction - launchYear) / (endYear - launchYear)));
+
+  // Draw as thicker blue arc on sun-facing side, width proportional to windowPct
+  const arcSpread = windowPct * 1.2; // max spread 1.2 radians each side
+  if (arcSpread > 0.01) {
+    sCtx.beginPath();
+    sCtx.arc(earthX, earthY, earthR + 5, atmAngle - arcSpread, atmAngle + arcSpread);
+    sCtx.strokeStyle = `rgba(80,140,255,${0.15 * windowPct})`;
+    sCtx.lineWidth = 6 * windowPct + 2;
+    sCtx.stroke();
+  }
+}
+
+// ═══════════════════════════════════════════
+// CLOCK RENDERING
+// ═══════════════════════════════════════════
+const clockCanvas = document.getElementById('clock-canvas');
+const cCtx = clockCanvas.getContext('2d');
+const CX = 500, CY = 500, R = 420;
+
+// Crack lines (pre-generated)
+const cracks = [];
+for (let i = 0; i < 8; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const startR = R * (0.6 + Math.random() * 0.35);
+  const len = 30 + Math.random() * 60;
+  const segs = [];
+  let cx = CX + Math.cos(a) * startR;
+  let cy = CY + Math.sin(a) * startR;
+  segs.push({ x: cx, y: cy });
+  for (let j = 0; j < 4; j++) {
+    cx += Math.cos(a + (Math.random() - 0.5) * 1.2) * (len / 4);
+    cy += Math.sin(a + (Math.random() - 0.5) * 1.2) * (len / 4);
+    segs.push({ x: cx, y: cy });
+  }
+  cracks.push({ segs: segs, depth: i < 4 ? 'small' : 'deep' });
+}
+
+// Roman numerals
+const romanNumerals = ['XII','I','II','III','IV','V','VI','VII','VIII','IX','X','XI'];
+
+// Color interpolation helper
+function lerpColor(r1,g1,b1, r2,g2,b2, t) {
+  return [
+    Math.round(r1 + (r2 - r1) * t),
+    Math.round(g1 + (g2 - g1) * t),
+    Math.round(b1 + (b2 - b1) * t)
+  ];
+}
+
+function drawClock(progress) {
+  cCtx.clearRect(0, 0, 1000, 1000);
+
+  // Color calculation based on progress
+  let cr, cg, cb, alphaMultiplier = 1;
+  if (progress <= 0.3) {
+    // gold (180,140,60) -> silver (150,150,160)
+    const t = progress / 0.3;
+    [cr, cg, cb] = lerpColor(180,140,60, 150,150,160, t);
+  } else if (progress <= 0.6) {
+    // silver (150,150,160) -> red (200,60,40)
+    const t = (progress - 0.3) / 0.3;
+    [cr, cg, cb] = lerpColor(150,150,160, 200,60,40, t);
+  } else {
+    // red (200,60,40) -> dim (200,30,10), decreasing alpha
+    const t = (progress - 0.6) / 0.4;
+    [cr, cg, cb] = lerpColor(200,60,40, 200,30,10, t);
+    alphaMultiplier = 1 - t * 0.5; // fade to 0.5 alpha
+  }
+
+  const baseColor = `rgb(${cr},${cg},${cb})`;
+  const glowMult = clockGlowIntensity * alphaMultiplier;
+
+  // 1. Ambient center glow
+  const ambGlow = cCtx.createRadialGradient(CX, CY, 0, CX, CY, R * 0.6);
+  ambGlow.addColorStop(0, `rgba(${cr},${cg},${cb},${0.03 * glowMult})`);
+  ambGlow.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+  cCtx.fillStyle = ambGlow;
+  cCtx.beginPath();
+  cCtx.arc(CX, CY, R * 0.6, 0, Math.PI * 2);
+  cCtx.fill();
+
+  // 2. Shockwave ring
+  if (shockwaveAlpha > 0.01) {
+    cCtx.beginPath();
+    cCtx.arc(CX, CY, shockwaveRadius, 0, Math.PI * 2);
+    cCtx.strokeStyle = `rgba(${cr},${cg},${cb},${shockwaveAlpha})`;
+    cCtx.lineWidth = 2;
+    cCtx.stroke();
+  }
+
+  // 3. Outer ring (faint) at R+10
+  cCtx.beginPath();
+  cCtx.arc(CX, CY, R + 10, 0, Math.PI * 2);
+  cCtx.strokeStyle = `rgba(${cr},${cg},${cb},${0.08 * alphaMultiplier})`;
+  cCtx.lineWidth = 1;
+  cCtx.stroke();
+
+  // 4. Main ring — at progress > 0.4, break into segments
+  if (progress <= 0.4) {
+    // Glow layer (12px)
+    cCtx.beginPath();
+    cCtx.arc(CX, CY, R, 0, Math.PI * 2);
+    cCtx.strokeStyle = `rgba(${cr},${cg},${cb},${0.08 * glowMult})`;
+    cCtx.lineWidth = 12;
+    cCtx.stroke();
+
+    // Sharp line (2.5px)
+    cCtx.beginPath();
+    cCtx.arc(CX, CY, R, 0, Math.PI * 2);
+    cCtx.strokeStyle = `rgba(${cr},${cg},${cb},${0.35 * glowMult})`;
+    cCtx.lineWidth = 2.5;
+    cCtx.stroke();
+  } else {
+    // Broken into segments
+    const breakCount = Math.floor((progress - 0.4) * 15) + 2; // 2 to ~11 breaks
+    const gapSize = 0.02 + (progress - 0.4) * 0.08; // gaps widen with progress
+    const segAngles = [];
+    // Deterministic break positions based on golden ratio
+    for (let i = 0; i < breakCount; i++) {
+      segAngles.push(((i * 2.399) % 1) * Math.PI * 2); // golden angle distribution
+    }
+    segAngles.sort((a, b) => a - b);
+
+    // Draw segments between breaks
+    for (let i = 0; i < segAngles.length; i++) {
+      const start = segAngles[i] + gapSize;
+      const end = (i + 1 < segAngles.length) ? segAngles[i + 1] - gapSize : segAngles[0] + Math.PI * 2 - gapSize;
+      if (end > start) {
+        // Glow layer
+        cCtx.beginPath();
+        cCtx.arc(CX, CY, R, start, end);
+        cCtx.strokeStyle = `rgba(${cr},${cg},${cb},${0.08 * glowMult})`;
+        cCtx.lineWidth = 12;
+        cCtx.stroke();
+
+        // Sharp line
+        cCtx.beginPath();
+        cCtx.arc(CX, CY, R, start, end);
+        cCtx.strokeStyle = `rgba(${cr},${cg},${cb},${0.35 * glowMult})`;
+        cCtx.lineWidth = 2.5;
+        cCtx.stroke();
+      }
+    }
+  }
+
+  // 5. Tick marks — each fades at different progress threshold
+  for (let i = 0; i < 60; i++) {
+    const tickAngle = (i / 60) * Math.PI * 2 - Math.PI / 2;
+    const isHour = (i % 5 === 0);
+    const innerR = isHour ? R - 28 : R - 14;
+    const outerR = R - 4;
+
+    // Each tick fades at a different threshold
+    const tickThreshold = 0.3 + (i / 60) * 0.6; // ticks fade from 0.3 to 0.9
+    const tickAlpha = progress < tickThreshold ? 1 : Math.max(0, 1 - (progress - tickThreshold) / 0.15);
+    if (tickAlpha <= 0) continue;
+
+    const x1 = CX + Math.cos(tickAngle) * innerR;
+    const y1 = CY + Math.sin(tickAngle) * innerR;
+    const x2 = CX + Math.cos(tickAngle) * outerR;
+    const y2 = CY + Math.sin(tickAngle) * outerR;
+    cCtx.beginPath();
+    cCtx.moveTo(x1, y1);
+    cCtx.lineTo(x2, y2);
+    cCtx.strokeStyle = isHour
+      ? `rgba(${cr},${cg},${cb},${0.5 * glowMult * tickAlpha})`
+      : `rgba(${cr},${cg},${cb},${0.2 * glowMult * tickAlpha})`;
+    cCtx.lineWidth = isHour ? 2.5 : 1;
+    cCtx.stroke();
+  }
+
+  // 6. Roman numerals — each fades at different threshold
+  cCtx.font = '28px Georgia';
+  cCtx.textAlign = 'center';
+  cCtx.textBaseline = 'middle';
+  for (let i = 0; i < 12; i++) {
+    const numAngle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+    const numR = R - 50;
+    const nx = CX + Math.cos(numAngle) * numR;
+    const ny = CY + Math.sin(numAngle) * numR;
+
+    // Each numeral fades at its own threshold
+    const numThreshold = 0.2 + (i / 12) * 0.65;
+    const numAlpha = progress < numThreshold ? 1 : Math.max(0, 1 - (progress - numThreshold) / 0.15);
+    if (numAlpha <= 0) continue;
+
+    cCtx.fillStyle = `rgba(${cr},${cg},${cb},${0.3 * glowMult * numAlpha})`;
+    cCtx.fillText(romanNumerals[i], nx, ny);
+  }
+
+  // 7. Crack lines — appear based on progress
+  for (const crack of cracks) {
+    let crackAlpha = 0;
+    if (crack.depth === 'small' && progress > 0.35) {
+      crackAlpha = Math.min(1, (progress - 0.35) / 0.2);
+    } else if (crack.depth === 'deep' && progress > 0.6) {
+      crackAlpha = Math.min(1, (progress - 0.6) / 0.2);
+    }
+    if (crackAlpha <= 0) continue;
+
+    const segs = crack.segs;
+    cCtx.beginPath();
+    cCtx.moveTo(segs[0].x, segs[0].y);
+    for (let i = 1; i < segs.length; i++) {
+      cCtx.lineTo(segs[i].x, segs[i].y);
+    }
+    cCtx.strokeStyle = `rgba(${cr},${cg},${cb},${0.12 * crackAlpha * alphaMultiplier})`;
+    cCtx.lineWidth = crack.depth === 'deep' ? 1.2 : 0.8;
+    cCtx.stroke();
+  }
+
+  // 8. Clock hand — eases toward target
+  let angleDiff = clockTargetAngle - clockHandAngle;
+  // Normalize to [-PI, PI]
+  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+  clockHandAngle += angleDiff * 0.12;
+
+  const handLen = R * 0.75;
+  const tailLen = R * 0.15;
+  const tipX = CX + Math.cos(clockHandAngle) * handLen;
+  const tipY = CY + Math.sin(clockHandAngle) * handLen;
+  const tailX = CX - Math.cos(clockHandAngle) * tailLen;
+  const tailY = CY - Math.sin(clockHandAngle) * tailLen;
+
+  // Hand gradient glow behind (wider stroke)
+  const glowGrad = cCtx.createLinearGradient(tailX, tailY, tipX, tipY);
+  glowGrad.addColorStop(0, `rgba(${cr},${cg},${cb},0)`);
+  glowGrad.addColorStop(0.3, `rgba(${cr},${cg},${cb},${0.08 * glowMult})`);
+  glowGrad.addColorStop(1, `rgba(${cr},${cg},${cb},${0.15 * glowMult})`);
+  cCtx.beginPath();
+  cCtx.moveTo(tailX, tailY);
+  cCtx.lineTo(tipX, tipY);
+  cCtx.strokeStyle = glowGrad;
+  cCtx.lineWidth = 10;
+  cCtx.stroke();
+
+  // Hand solid line (3.5px)
+  const handGrad = cCtx.createLinearGradient(CX, CY, tipX, tipY);
+  handGrad.addColorStop(0, `rgba(${cr},${cg},${cb},${0.6 * glowMult})`);
+  handGrad.addColorStop(1, `rgba(${Math.min(255, cr + 40)},${Math.min(255, cg + 40)},${Math.min(255, cb + 20)},${0.9 * glowMult})`);
+  cCtx.beginPath();
+  cCtx.moveTo(tailX, tailY);
+  cCtx.lineTo(tipX, tipY);
+  cCtx.strokeStyle = handGrad;
+  cCtx.lineWidth = 3.5;
+  cCtx.stroke();
+
+  // 9. Tip glow
+  const tipGlow = cCtx.createRadialGradient(tipX, tipY, 0, tipX, tipY, 20);
+  tipGlow.addColorStop(0, `rgba(${Math.min(255, cr + 40)},${Math.min(255, cg + 40)},${Math.min(255, cb + 20)},${0.3 * glowMult})`);
+  tipGlow.addColorStop(1, `rgba(${Math.min(255, cr + 40)},${Math.min(255, cg + 40)},${Math.min(255, cb + 20)},0)`);
+  cCtx.fillStyle = tipGlow;
+  cCtx.beginPath();
+  cCtx.arc(tipX, tipY, 20, 0, Math.PI * 2);
+  cCtx.fill();
+
+  // 10. Center ember
+  const ember = cCtx.createRadialGradient(CX, CY, 0, CX, CY, 16);
+  ember.addColorStop(0, `rgba(${Math.min(255, cr + 60)},${Math.min(255, cg + 60)},${Math.min(255, cb + 40)},${0.7 * glowMult})`);
+  ember.addColorStop(0.5, `rgba(${Math.min(255, cr + 20)},${Math.min(255, cg + 10)},${cb},${0.3 * glowMult})`);
+  ember.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+  cCtx.fillStyle = ember;
+  cCtx.beginPath();
+  cCtx.arc(CX, CY, 16, 0, Math.PI * 2);
+  cCtx.fill();
+
+  // Center dot (6px)
+  cCtx.beginPath();
+  cCtx.arc(CX, CY, 6, 0, Math.PI * 2);
+  cCtx.fillStyle = `rgba(${Math.min(255, cr + 60)},${Math.min(255, cg + 70)},${Math.min(255, cb + 70)},${0.8 * glowMult})`;
+  cCtx.fill();
+
+  // Update shockwave
+  if (shockwaveAlpha > 0.01) {
+    shockwaveRadius += 3;
+    shockwaveAlpha *= 0.95;
+    if (shockwaveRadius > R + 30) shockwaveAlpha = 0;
+  }
+}
+
+// ═══════════════════════════════════════════
+// ANIMATION LOOP
+// ═══════════════════════════════════════════
+function animate(ts) {
+  const t = ts / 1000;
+  drawSpace(t);
+  const progress = currentSection / (totalSections - 1);
+  drawClock(progress);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+</script>
 </body>
 </html>
