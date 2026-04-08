@@ -166,23 +166,21 @@
     font-family: 'Courier New', monospace;
     font-size: 36px;
     font-weight: bold;
-    color: rgb(255,160,50);
+    color: rgb(255,180,80);
     background: radial-gradient(ellipse at center,
-      rgba(255,140,30,0.06) 0%,
-      rgba(20,12,6,0.4) 50%,
-      rgba(10,8,6,0.6) 100%
+      rgba(255,140,30,0.03) 0%,
+      rgba(15,10,5,0.5) 50%,
+      rgba(8,6,4,0.7) 100%
     );
-    border: 1px solid rgba(120,80,30,0.15);
+    border: 1px solid rgba(100,70,25,0.12);
     border-radius: 6px;
     text-shadow:
-      0 0 8px rgba(255,140,30,0.9),
-      0 0 20px rgba(255,120,20,0.5),
-      0 0 40px rgba(255,100,10,0.25),
-      0 0 2px rgba(255,200,100,1);
+      0 0 4px rgba(255,150,40,0.4),
+      0 0 10px rgba(255,120,20,0.15);
     position: relative;
     box-shadow:
-      inset 0 0 15px rgba(255,130,20,0.04),
-      0 0 8px rgba(255,120,20,0.08);
+      inset 0 0 10px rgba(255,130,20,0.02),
+      0 0 4px rgba(255,120,20,0.04);
   }
   /* Glass tube reflection */
   .nixie-digit::before {
@@ -194,15 +192,29 @@
     border-radius: 4px 2px 0 0;
     pointer-events: none;
   }
-  /* Ghost digits behind (stacked cathode look) */
-  .nixie-digit::after {
-    content: '8';
+  /* Ghost cathode stack — all digits visible but dark behind the active one */
+  .nixie-digit .nixie-ghost {
     position: absolute;
     font-family: 'Courier New', monospace;
     font-size: 36px;
     font-weight: bold;
-    color: rgba(120,70,20,0.06);
+    color: rgba(100,60,15,0.045);
     pointer-events: none;
+  }
+  /* Each ghost digit slightly offset to simulate depth */
+  .nixie-digit .nixie-ghost:nth-child(1) { transform: translate(0.3px, 0.2px); }
+  .nixie-digit .nixie-ghost:nth-child(2) { transform: translate(-0.2px, 0.4px); }
+  .nixie-digit .nixie-ghost:nth-child(3) { transform: translate(0.4px, -0.2px); }
+  .nixie-digit .nixie-ghost:nth-child(4) { transform: translate(-0.3px, -0.3px); }
+  .nixie-digit .nixie-ghost:nth-child(5) { transform: translate(0.2px, 0.3px); }
+  .nixie-digit .nixie-ghost:nth-child(6) { transform: translate(-0.4px, 0.1px); }
+  .nixie-digit .nixie-ghost:nth-child(7) { transform: translate(0.1px, -0.4px); }
+  .nixie-digit .nixie-ghost:nth-child(8) { transform: translate(-0.1px, 0.2px); }
+  .nixie-digit .nixie-ghost:nth-child(9) { transform: translate(0.3px, -0.1px); }
+  /* Active digit sits on top */
+  .nixie-digit .nixie-active {
+    position: relative;
+    z-index: 1;
   }
 
   /* Era time also gets nixie treatment */
@@ -211,7 +223,7 @@
     height: 76px;
     font-size: 52px;
   }
-  .era-time .nixie-digit::after {
+  .era-time .nixie-digit .nixie-ghost {
     font-size: 52px;
   }
   .era-time .nixie-colon {
@@ -898,20 +910,27 @@
 // NIXIE TUBE DIGIT WRAPPING
 // ═══════════════════════════════════════════
 // Wrap each character in era-time and second-year into nixie spans
+function nixieWrap(ch) {
+  // Build ghost cathode stack: all digits 0-9 except the active one
+  const ghosts = '0123456789'.split('')
+    .filter(d => d !== ch)
+    .map(d => `<span class="nixie-ghost">${d}</span>`)
+    .join('');
+  return `<span class="nixie-digit">${ghosts}<span class="nixie-active">${ch}</span></span>`;
+}
+
 document.querySelectorAll('.era-time').forEach(el => {
   const text = el.textContent.trim();
   el.innerHTML = text.split('').map(ch => {
     if (ch === ':') return '<span class="nixie-colon">:</span>';
     if (ch === ' ') return '';
-    return `<span class="nixie-digit">${ch}</span>`;
+    return nixieWrap(ch);
   }).join('');
 });
 document.querySelectorAll('.second-year').forEach(el => {
   const text = el.textContent.trim();
   if (!text) return;
-  el.innerHTML = text.split('').map(ch =>
-    `<span class="nixie-digit">${ch}</span>`
-  ).join('');
+  el.innerHTML = text.split('').map(ch => nixieWrap(ch)).join('');
 });
 
 // ═══════════════════════════════════════════
