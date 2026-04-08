@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cognitive Doomsday Clock</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #060606;
+    color: #c8b89a;
+    font-family: Georgia, 'Times New Roman', serif;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Layer 0: Space background ── */
+  #space-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 0;
+  }
+
+  /* ── Layer 1: Clock ── */
+  #clock-wrap {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    pointer-events: none;
+  }
+  #clock-canvas {
+    display: block;
+    width: min(95vw, 95vh);
+    height: min(95vw, 95vh);
+  }
+
+  /* ── Layer 2: Vignette ── */
+  #vignette {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 2;
+    pointer-events: none;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(6,6,6,0)    0%,
+      rgba(6,6,6,0)    20%,
+      rgba(6,6,6,0.01) 28%,
+      rgba(6,6,6,0.04) 35%,
+      rgba(6,6,6,0.08) 40%,
+      rgba(6,6,6,0.14) 45%,
+      rgba(6,6,6,0.22) 50%,
+      rgba(6,6,6,0.34) 55%,
+      rgba(6,6,6,0.48) 60%,
+      rgba(6,6,6,0.64) 68%,
+      rgba(6,6,6,0.80) 78%,
+      rgba(6,6,6,0.92) 90%
+    );
+  }
+
+  /* ── Layer 3: Pulse overlay ── */
+  #pulse-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 3;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(
+      circle at center,
+      rgba(160,120,60,0.12) 0%,
+      rgba(160,120,60,0.04) 40%,
+      rgba(160,120,60,0) 70%
+    );
+    transition: opacity 0.08s ease-out;
+  }
+
+  /* ── Layer 4: Content ── */
+  #content {
+    position: relative;
+    z-index: 4;
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ── Era Headers ── */
+  .era-header {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+  .era-header.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .era-time {
+    font-family: 'Courier New', monospace;
+    font-size: 72px;
+    color: rgb(160,120,60);
+    text-shadow:
+      0 0 20px rgba(160,120,60,0.6),
+      0 0 40px rgba(160,120,60,0.3),
+      0 0 80px rgba(160,120,60,0.15);
+    letter-spacing: 4px;
+    margin-bottom: 12px;
+  }
+
+  .era-name {
+    font-family: Georgia, serif;
+    font-size: 48px;
+    color: #c8b89a;
+    margin-bottom: 16px;
+  }
+
+  .era-subtitle {
+    font-family: Georgia, serif;
+    font-size: 18px;
+    color: rgba(200,184,154,0.5);
+    font-style: italic;
+  }
+
+  /* ── Second Sections (Events) ── */
+  .second-section {
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px 0;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+  .second-section.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .second-year {
+    font-family: 'Courier New', monospace;
+    font-size: 42px;
+    color: rgb(160,120,60);
+    margin-bottom: 16px;
+  }
+
+  .second-text {
+    font-size: 28px;
+    line-height: 1.6;
+    color: rgba(200,184,154,0.85);
+    margin-bottom: 20px;
+  }
+  .second-text strong {
+    color: #c8b89a;
+    border-bottom: 1px solid rgba(160,120,60,0.4);
+    padding-bottom: 1px;
+  }
+
+  .second-ref {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: rgba(200,184,154,0.2);
+  }
+
+  /* ── Punchlines ── */
+  .punchline {
+    min-height: 80vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+  .punchline.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .punchline blockquote {
+    font-size: 32px;
+    font-style: italic;
+    color: rgba(200,184,154,0.6);
+    max-width: 540px;
+    line-height: 1.5;
+  }
+
+  /* ── YOU ARE HERE marker ── */
+  .you-are-here .era-header,
+  .era-header.you-are-here {
+    /* Inherits era-header styles */
+  }
+
+  .you-are-here-marker {
+    font-family: 'Courier New', monospace;
+    font-size: 24px;
+    color: rgb(160,120,60);
+    text-shadow:
+      0 0 15px rgba(160,120,60,0.8),
+      0 0 30px rgba(160,120,60,0.5),
+      0 0 60px rgba(160,120,60,0.3);
+    letter-spacing: 6px;
+    margin-bottom: 24px;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      text-shadow:
+        0 0 15px rgba(160,120,60,0.8),
+        0 0 30px rgba(160,120,60,0.5),
+        0 0 60px rgba(160,120,60,0.3);
+    }
+    50% {
+      text-shadow:
+        0 0 20px rgba(160,120,60,1),
+        0 0 40px rgba(160,120,60,0.7),
+        0 0 80px rgba(160,120,60,0.4);
+    }
+  }
+
+  /* ── Point of No Return ── */
+  .point-of-no-return {
+    min-height: 60vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+  .point-of-no-return.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .point-of-no-return p {
+    font-size: 24px;
+    font-style: italic;
+    color: rgba(200,184,154,0.45);
+    max-width: 500px;
+    line-height: 1.6;
+  }
+
+  /* ── Future eras ── */
+  [data-era="future"] .second-text {
+    color: rgba(200,184,154,0.6);
+  }
+
+  [data-era="future"] .second-year {
+    display: none;
+  }
+
+  /* ── Ending ── */
+  .ending {
+    min-height: 100vh;
+  }
+  .ending-space {
+    min-height: 100vh;
+  }
+</style>
+</head>
+<body>
+
+<!-- Layer 0 -->
+<canvas id="space-canvas"></canvas>
+
+<!-- Layer 1 -->
+<div id="clock-wrap">
+  <canvas id="clock-canvas" width="1000" height="1000"></canvas>
+</div>
+
+<!-- Layer 2 -->
+<div id="vignette"></div>
+
+<!-- Layer 3 -->
+<div id="pulse-overlay"></div>
+
+<!-- Layer 4 -->
+<div id="content">
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ERA 1: 23:40 — The Builders (1990–2000)                -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <section class="era-header" data-section="0" data-minute="40" data-era="past">
+    <div class="era-time">23:40</div>
+    <div class="era-name">The Builders</div>
+    <div class="era-subtitle">Humans build the world through machines, for humans. 1990&ndash;2000.</div>
+  </section>
+
+  <section class="second-section" data-section="1" data-minute="40.2" data-era="past">
+    <div class="second-year">1991</div>
+    <div class="second-text">
+      Tim Berners-Lee publishes the first website. Anyone can link to anything. <strong>No algorithm decides what you see.</strong>
+    </div>
+    <div class="second-ref">ref: CERN</div>
+  </section>
+
+  <section class="second-section" data-section="2" data-minute="40.4" data-era="past">
+    <div class="second-year">1993</div>
+    <div class="second-text">
+      Mosaic browser. The internet gets a face. A generation learns HTML by <strong>right-clicking &ldquo;View Source.&rdquo;</strong>
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="3" data-minute="40.6" data-era="past">
+    <div class="second-year">1995</div>
+    <div class="second-text">
+      Amazon, eBay launch. Commerce moves online but <strong>humans write every product description</strong>, every review is real.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="4" data-minute="40.8" data-era="past">
+    <div class="second-year">1998</div>
+    <div class="second-text">
+      Google indexes the web. PageRank: machines organise human knowledge, but <strong>humans create it</strong>.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="5" data-minute="41.0" data-era="past">
+    <div class="second-year">1999</div>
+    <div class="second-text">
+      <strong>280 million</strong> internet users worldwide. Each one had to <strong>figure things out from scratch</strong>.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="punchline" data-section="6" data-minute="43.5" data-era="past">
+    <blockquote>&ldquo;The last era where using a computer required understanding one.&rdquo;</blockquote>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ERA 2: 23:44 — The Democratisers (2000–2007)           -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <section class="era-header" data-section="7" data-minute="44" data-era="past">
+    <div class="era-time">23:44</div>
+    <div class="era-name">The Democratisers</div>
+    <div class="era-subtitle">Knowledge becomes free. The golden age we didn&rsquo;t recognise. 2000&ndash;2007.</div>
+  </section>
+
+  <section class="second-section" data-section="8" data-minute="44.2" data-era="past">
+    <div class="second-year">2001</div>
+    <div class="second-text">
+      Wikipedia launches. Humans write encyclopaedias for free. <strong>Collective knowledge without algorithmic curation.</strong>
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="9" data-minute="44.4" data-era="past">
+    <div class="second-year">2004</div>
+    <div class="second-text">
+      Facebook launches. Still chronological. You see <strong>what your friends post</strong>, in order.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="10" data-minute="44.6" data-era="past">
+    <div class="second-year">2005</div>
+    <div class="second-text">
+      YouTube: &ldquo;Broadcast yourself.&rdquo; The verb matters &mdash; <strong>you create, you broadcast</strong>.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="11" data-minute="44.8" data-era="past">
+    <div class="second-year">2006</div>
+    <div class="second-text">
+      Twitter launches. 140 characters. <strong>Humans talking to humans</strong>, unfiltered.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="12" data-minute="45.0" data-era="past">
+    <div class="second-year">2007</div>
+    <div class="second-text">
+      iPhone. A computer in every pocket. The last device where <strong>users chose every app deliberately</strong>.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="punchline" data-section="13" data-minute="46.5" data-era="past">
+    <blockquote>&ldquo;We thought we were democratising knowledge. We were building the rails for something else.&rdquo;</blockquote>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ERA 3: 23:47 — The Curators (2007–2015)                -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <section class="era-header" data-section="14" data-minute="47" data-era="past">
+    <div class="era-time">23:47</div>
+    <div class="era-name">The Curators</div>
+    <div class="era-subtitle">Machines begin deciding what you see. 2007&ndash;2015.</div>
+  </section>
+
+  <section class="second-section" data-section="15" data-minute="47.2" data-era="past">
+    <div class="second-year">2009</div>
+    <div class="second-text">
+      Facebook introduces algorithmic feed. You no longer see what your friends post &mdash; you see what the algorithm <strong>predicts you&rsquo;ll engage with</strong>.
+    </div>
+    <div class="second-ref">ref: Ars Technica</div>
+  </section>
+
+  <section class="second-section" data-section="16" data-minute="47.4" data-era="past">
+    <div class="second-year">2011</div>
+    <div class="second-text">
+      Google personalises search results. Two people googling the same question <strong>get different answers</strong>.
+    </div>
+    <div class="second-ref">ref: Eli Pariser, &ldquo;The Filter Bubble&rdquo;</div>
+  </section>
+
+  <section class="second-section" data-section="17" data-minute="47.6" data-era="past">
+    <div class="second-year">2012</div>
+    <div class="second-text">
+      Facebook mood experiment: <strong>689,000 users&rsquo;</strong> feeds manipulated to test emotional contagion. It worked.
+    </div>
+    <div class="second-ref">ref: PNAS 2014</div>
+  </section>
+
+  <section class="second-section" data-section="18" data-minute="47.8" data-era="past">
+    <div class="second-year">2013</div>
+    <div class="second-text">
+      Snowden reveals mass surveillance infrastructure. <strong>The pipes we built are watched.</strong>
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="19" data-minute="48.0" data-era="past">
+    <div class="second-year">2015</div>
+    <div class="second-text">
+      <strong>3.2 billion</strong> internet users. Most never built a website, never saw source code. <strong>Consumers, not builders.</strong>
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="punchline" data-section="20" data-minute="49.5" data-era="past">
+    <blockquote>&ldquo;The shift was invisible: from &lsquo;here&rsquo;s what exists&rsquo; to &lsquo;here&rsquo;s what we think you want.&rsquo;&rdquo;</blockquote>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ERA 4: 23:50 — The Creators (2015–2020)                -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <section class="era-header" data-section="21" data-minute="50" data-era="past">
+    <div class="era-time">23:50</div>
+    <div class="era-name">The Creators</div>
+    <div class="era-subtitle">Machines learn to make things. 2015&ndash;2020.</div>
+  </section>
+
+  <section class="second-section" data-section="22" data-minute="50.2" data-era="past">
+    <div class="second-year">2016</div>
+    <div class="second-text">
+      AlphaGo beats Lee Sedol. Move 37: a move <strong>no human would play</strong>, that no human understood, that won.
+    </div>
+    <div class="second-ref">ref: DeepMind</div>
+  </section>
+
+  <section class="second-section" data-section="23" data-minute="50.4" data-era="past">
+    <div class="second-year">2017</div>
+    <div class="second-text">
+      Transformer architecture published. <strong>&ldquo;Attention Is All You Need&rdquo;</strong> &mdash; 8 Google researchers write the paper that changes everything.
+    </div>
+    <div class="second-ref">ref: Vaswani et al.</div>
+  </section>
+
+  <section class="second-section" data-section="24" data-minute="50.6" data-era="past">
+    <div class="second-year">2018</div>
+    <div class="second-text">
+      GPT-1. <strong>117 million parameters.</strong> Can write a paragraph. Nobody notices.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="25" data-minute="50.8" data-era="past">
+    <div class="second-year">2019</div>
+    <div class="second-text">
+      GPT-2. OpenAI initially refuses to release it &mdash; <strong>&ldquo;too dangerous.&rdquo;</strong> 1.5 billion parameters.
+    </div>
+    <div class="second-ref">ref: OpenAI blog</div>
+  </section>
+
+  <section class="second-section" data-section="26" data-minute="51.0" data-era="past">
+    <div class="second-year">2020</div>
+    <div class="second-text">
+      GPT-3. <strong>175 billion parameters.</strong> Can write essays, code, poetry. The line between human and machine text begins to blur.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="punchline" data-section="27" data-minute="51.5" data-era="past">
+    <blockquote>&ldquo;The question stopped being &lsquo;can machines think?&rsquo; It became &lsquo;does it matter if they can&rsquo;t?&rsquo;&rdquo;</blockquote>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ERA 5: 23:52 — The Managers (2020–2023)                 -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <section class="era-header" data-section="28" data-minute="52" data-era="past">
+    <div class="era-time">23:52</div>
+    <div class="era-name">The Managers</div>
+    <div class="era-subtitle">Everyone becomes a manager of machines. 2020&ndash;2023.</div>
+  </section>
+
+  <section class="second-section" data-section="29" data-minute="52.2" data-era="past">
+    <div class="second-year">2021</div>
+    <div class="second-text">
+      GitHub Copilot. Programmers stop <strong>writing code</strong> and start <strong>approving code</strong>. Productivity doubles. Understanding halves.
+    </div>
+    <div class="second-ref">ref: GitHub Blog, June 2021</div>
+  </section>
+
+  <section class="second-section" data-section="30" data-minute="52.4" data-era="past">
+    <div class="second-year">2022</div>
+    <div class="second-text">
+      ChatGPT reaches <strong>100 million users</strong> in 2 months. The fastest adoption of any technology in history.
+    </div>
+    <div class="second-ref">ref: Reuters</div>
+  </section>
+
+  <section class="second-section" data-section="31" data-minute="52.6" data-era="past">
+    <div class="second-year">2022</div>
+    <div class="second-text">
+      DALL-E 2, Midjourney, Stable Diffusion. Art, illustration, design &mdash; <strong>machines create, humans curate</strong>.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="32" data-minute="52.8" data-era="past">
+    <div class="second-year">2023</div>
+    <div class="second-text">
+      GPT-4 <strong>passes the bar exam</strong>, medical licensing exams, AP tests. Scores higher than most humans.
+    </div>
+    <div class="second-ref">ref: OpenAI</div>
+  </section>
+
+  <section class="second-section" data-section="33" data-minute="53.0" data-era="past">
+    <div class="second-year">2023</div>
+    <div class="second-text">
+      Stack Overflow traffic drops <strong>35%</strong> in 6 months. Developers stop asking humans.
+    </div>
+    <div class="second-ref">ref: SimilarWeb</div>
+  </section>
+
+  <section class="punchline" data-section="34" data-minute="53.5" data-era="past">
+    <blockquote>&ldquo;We didn&rsquo;t notice the transition. One day we were writing, the next we were editing. One day we were solving, the next we were approving.&rdquo;</blockquote>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ERA 6: 23:54 — The Last Validators (2023–2026)          -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <section class="era-header you-are-here" data-section="35" data-minute="54" data-era="present">
+    <div class="you-are-here-marker">&#10235; YOU ARE HERE</div>
+    <div class="era-time">23:54</div>
+    <div class="era-name">The Last Validators</div>
+    <div class="era-subtitle">The last generation that knows what it doesn&rsquo;t know. 2023&ndash;2026.</div>
+  </section>
+
+  <section class="second-section" data-section="36" data-minute="54.2" data-era="present">
+    <div class="second-year">2024</div>
+    <div class="second-text">
+      AI-generated content <strong>exceeds human-generated content</strong> online for the first time.
+    </div>
+    <div class="second-ref">ref: Europol, estimated</div>
+  </section>
+
+  <section class="second-section" data-section="37" data-minute="54.4" data-era="present">
+    <div class="second-year">2024</div>
+    <div class="second-text">
+      <strong>&ldquo;Vibe coding&rdquo;</strong> enters the vocabulary. Building software by describing what you want, not understanding how it works.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="38" data-minute="54.6" data-era="present">
+    <div class="second-year">2025</div>
+    <div class="second-text">
+      Autonomous AI agents manage portfolios, write legal contracts, diagnose patients. <strong>Humans sign off.</strong> The signature is the job.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="39" data-minute="54.8" data-era="present">
+    <div class="second-year">2025</div>
+    <div class="second-text">
+      First generation of CS graduates who <strong>never debugged without AI assistance</strong> enters the workforce.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="40" data-minute="55.0" data-era="present">
+    <div class="second-year">2026</div>
+    <div class="second-text">
+      <strong>3 companies</strong> control the cognitive infrastructure of the planet. Their engineers&rsquo; blind spots become <strong>everyone&rsquo;s blind spots</strong>.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="punchline" data-section="41" data-minute="55.5" data-era="present">
+    <blockquote>&ldquo;We are the last generation that built things from scratch. We can still tell when the machine is wrong. The question is: who comes after us?&rdquo;</blockquote>
+  </section>
+
+  <section class="point-of-no-return" data-section="42" data-minute="55.7" data-era="present">
+    <p>&ldquo;The point of no return doesn&rsquo;t announce itself. It may already be behind us.&rdquo;</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ERA 7: 23:56 — The Delegators (2026–2035)               -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <section class="era-header" data-section="43" data-minute="56" data-era="future">
+    <div class="era-time">23:56</div>
+    <div class="era-name">The Delegators</div>
+    <div class="era-subtitle">Prognosis. The future hasn&rsquo;t been written yet. 2026&ndash;2035.</div>
+  </section>
+
+  <section class="second-section" data-section="44" data-minute="56.2" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      Autonomous organisations become mundane. Not exotic &mdash; <strong>boring</strong>. Like registering a company.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="45" data-minute="56.4" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      Education reforms: <strong>&ldquo;AI literacy&rdquo;</strong> replaces foundational skills. Because it&rsquo;s easier. For everyone.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="46" data-minute="56.6" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      The last managers who built things from scratch are still in the room. But they&rsquo;re <strong>senior now</strong>. Not building. Reviewing.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="47" data-minute="56.8" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      Junior employees are excellent at prompting. They don&rsquo;t know <strong>what questions they&rsquo;re not asking</strong>.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="48" data-minute="57.0" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      The solution space <strong>quietly contracts</strong>. Nobody measures what&rsquo;s no longer being explored.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="punchline" data-section="49" data-minute="57.5" data-era="future">
+    <blockquote>&ldquo;The window narrows. Those who remember building from scratch are still in the room. They won&rsquo;t be forever.&rdquo;</blockquote>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ERA 8: 23:58 — The Hollow Generation (2035–2055)        -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <section class="era-header" data-section="50" data-minute="58" data-era="future">
+    <div class="era-time">23:58</div>
+    <div class="era-name">The Hollow Generation</div>
+    <div class="era-subtitle">The first generation that doesn&rsquo;t know what it doesn&rsquo;t know. 2035&ndash;2055.</div>
+  </section>
+
+  <section class="second-section" data-section="51" data-minute="58.15" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      The generation that grew up with AI in classrooms is now <strong>in leadership</strong>.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="52" data-minute="58.3" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      They are competent, productive, effective. They are not stupid. <strong>They are hollow.</strong>
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="53" data-minute="58.45" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      They cannot ask the questions they don&rsquo;t know to ask. <strong>The unknown unknowns are invisible.</strong>
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="54" data-minute="58.55" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      When systems fail, diagnosis is slow. Not because it&rsquo;s hard, but because <strong>nobody remembers how things work underneath</strong>.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="55" data-minute="58.65" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      Human work becomes <strong>aesthetic</strong> &mdash; a niche, like handcraft. Functionally unnecessary, culturally valued.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="56" data-minute="58.75" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      Power has shifted, but <strong>not visibly</strong>. No single evil AI. Just a complex ecosystem that nobody fully comprehends.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="punchline" data-section="57" data-minute="58.9" data-era="future">
+    <blockquote>&ldquo;They don&rsquo;t lack intelligence. They lack the friction that produces understanding.&rdquo;</blockquote>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ERA 9: 23:59 — The Remnants (2055–2076)                 -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <section class="era-header" data-section="58" data-minute="59" data-era="future">
+    <div class="era-time">23:59</div>
+    <div class="era-name">The Remnants</div>
+    <div class="era-subtitle">Comfortable. Efficient. Fragile. 2055&ndash;2076.</div>
+  </section>
+
+  <section class="second-section" data-section="59" data-minute="59.1" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      The world works. This is important. <strong>It is not a dystopia</strong> in any cinematic sense.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="60" data-minute="59.2" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      Things are more efficient, more comfortable, <strong>safer</strong>. Most people are content.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="61" data-minute="59.3" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      The solution space has contracted over generations and <strong>nobody notices</strong>, because nobody knows what was lost.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="62" data-minute="59.4" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      The system is <strong>brittle without appearing so</strong>. Everything works until it doesn&rsquo;t.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="63" data-minute="59.5" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      And when something truly breaks, the recovery capacity is low. Because <strong>there is no one left who can build from zero</strong>.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="second-section" data-section="64" data-minute="59.6" data-era="future">
+    <div class="second-year"></div>
+    <div class="second-text">
+      <strong>3 organisations&rsquo;</strong> implicit assumptions have quietly shaped the boundaries of all human thought for decades.
+    </div>
+    <div class="second-ref"></div>
+  </section>
+
+  <section class="punchline" data-section="65" data-minute="59.9" data-era="future">
+    <blockquote>&ldquo;The clock doesn&rsquo;t strike midnight. It simply becomes unreadable.&rdquo;</blockquote>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ENDING                                                  -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <section class="ending" data-section="66" data-minute="60">
+    <div class="ending-space"></div>
+  </section>
+
+</div>
+
+</body>
+</html>
