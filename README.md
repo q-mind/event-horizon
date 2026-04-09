@@ -1,38 +1,31 @@
 # Event Horizon
 
-**The Cognitive Doomsday Clock** — tracking the erosion of human cognitive independence in the AI era.
+We built the internet so anyone could access knowledge.
+Then we built algorithms to decide which knowledge you see.
+Then we built machines that create the knowledge itself.
 
-A scroll-driven single-page experience that visualizes the slow, invisible shift from a world built by humans through machines, to a world built by machines for machines.
+Now we're building a generation that will never know what it's like to build from scratch — that will never know what questions they're not asking, because they never had to find the answers themselves.
 
-## The Thesis
+This isn't a warning about AI becoming dangerous.
+It's a warning about humans becoming unnecessary — comfortably, efficiently, and without anyone noticing.
 
-The current generation is the last that built things from scratch — the last that can independently verify whether AI output is correct. Future generations won't lack intelligence. They'll lack the friction that produces understanding. They won't know what they don't know.
+**The clock doesn't strike midnight. It simply becomes unreadable.**
 
-The clock doesn't strike midnight. It simply becomes unreadable.
+---
 
-## How It Works
+The Cognitive Doomsday Clock traces this arc from 1990 to 2076 — from the first website to a world that works, but that no one left alive fully understands. Each tick forward is a real event or an honest projection. The clock itself degrades as you scroll. Earth's atmosphere — the shrinking blue arc — represents the window of time we have left to choose a different path. It's calculated from today's date. It gets narrower every day you don't visit.
 
-- **9 eras** from 1990 to 2076, each a "minute" on the doomsday clock
-- **The clock degrades** as you scroll — golden and whole at the start, fractured and fading by the end
-- **Earth's atmosphere** represents the shrinking window of human cognitive independence — calculated from today's real date, narrowing each day
-- **Audio ticks** echo through a synthesized hall reverb on each step forward
-- **Past events** are cited with references; **future projections** fade visually — uncertain, not asserted
+The point of no return doesn't announce itself. It may already be behind us.
+
+---
 
 ## Tech
 
-Single `index.html` with embedded CSS and JS. No frameworks, no build step, no dependencies.
-
-- Canvas 2D API (space background + clock)
-- Web Audio API (synthesized echoing tick)
-- Snap scroll with discrete clock steps
-
-## Deploy
-
-Serve `index.html` and `tick.mp3` from any static file server.
+Single `index.html`. No frameworks, no build step. Canvas 2D, Web Audio API, vanilla JS.
 
 ```
 index.html    # Everything
-tick.mp3      # Optional: real clock tick sample (fallback from Web Audio synthesis)
+tick.mp3      # Optional: echoing clock tick sample
 ```
 
 ## Contributors
