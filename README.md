@@ -40,6 +40,12 @@ tick.mp3      # Optional: echoing clock tick sample
 **[Martin Lall](https://github.com/martinlall)**
 **[Marc Tuulik](https://github.com/marctuulik)**
 
+## Planned Work
+
+**Self-calibrating clock.** The clock shouldn't just tick forward on a fixed schedule. The goal is to build an algorithm that catalogues real-world events, classifies them by relevance to cognitive independence, and calibrates the clock accordingly. Events that accelerate erosion push the hand forward. Events that restore independent capability — open source breakthroughs, education reforms, decentralisation of AI infrastructure — pull it back. The clock becomes a living instrument, not a static timeline.
+
+**Civilisation rebuild knowledge base.** If the thesis is right and critical infrastructure eventually suffers a cascading failure that nobody alive knows how to fix from scratch — then the responsible thing is to prepare for it. The second goal is to build and curate a knowledge base: how to rebuild civilisation from zero. Not fiction, not survivalism — structured, practical knowledge. Power generation, water purification, metallurgy, agriculture, communication, computation. The kind of knowledge that becomes invisible precisely because it works so well that nobody needs to understand it anymore. Until they do.
+
 ## License
 
 MIT
