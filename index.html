@@ -6,6 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@100;200&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='none' stroke='%23b48c3c' stroke-width='3'/><line x1='50' y1='50' x2='50' y2='15' stroke='%23b48c3c' stroke-width='3' stroke-linecap='round'/><circle cx='50' cy='50' r='4' fill='%23b48c3c'/></svg>">
 <title>Cognitive Doomsday Clock</title>
 <meta name="description" content="The Cognitive Doomsday Clock — tracking the erosion of human cognitive independence in the AI era.">
 <meta property="og:title" content="The Cognitive Doomsday Clock">
@@ -286,6 +287,22 @@
   }
   .ending-space {
     min-height: 100vh;
+  }
+
+  .site-footer {
+    text-align: center;
+    padding: 40px 0 30px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+  }
+  .site-footer a {
+    color: rgba(160,120,60,0.3);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(160,120,60,0.15);
+    transition: color 0.3s;
+  }
+  .site-footer a:hover {
+    color: rgba(160,120,60,0.6);
   }
 
   .scroll-hint {
@@ -834,6 +851,9 @@
 
   <section class="ending" data-section="66" data-minute="60">
     <div class="ending-space"></div>
+    <footer class="site-footer">
+      <a href="https://github.com/q-mind/event-horizon" target="_blank" rel="noopener">GitHub — for contributors</a>
+    </footer>
   </section>
 
   <div class="scroll-hint" id="scrollHint">&#8595; scroll or press arrow keys</div>
@@ -1105,19 +1125,26 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Touch
+// Touch — prevent native scroll entirely on mobile
 let touchStartY = 0;
+let touchHandled = false;
 window.addEventListener('touchstart', (e) => {
   touchStartY = e.touches[0].clientY;
+  touchHandled = false;
 }, { passive: true });
-window.addEventListener('touchend', (e) => {
-  if (scrollLocked) return;
-  const dy = touchStartY - e.changedTouches[0].clientY;
-  if (Math.abs(dy) > 50) {
+window.addEventListener('touchmove', (e) => {
+  e.preventDefault(); // block native scroll
+  if (touchHandled || scrollLocked) return;
+  const dy = touchStartY - e.touches[0].clientY;
+  if (Math.abs(dy) > 40) {
+    touchHandled = true;
     if (dy > 0) scrollToSection(currentSection + 1);
     else scrollToSection(currentSection - 1);
   }
-}, { passive: true });
+}, { passive: false });
+window.addEventListener('touchend', () => {
+  touchHandled = false;
+});
 
 // ═══════════════════════════════════════════
 // INTERSECTION OBSERVER (visibility only)
