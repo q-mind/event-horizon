@@ -916,10 +916,17 @@
 // LANDING SCREEN
 // ═══════════════════════════════════════════
 let started = false;
+// Reset scroll position on page load (in case of mid-page refresh)
+window.scrollTo(0, 0);
+
 document.getElementById('beginBtn').addEventListener('click', () => {
   // Init audio on this click (user activation event)
   initAudioSync();
   playTick();
+
+  // Scroll to top and reset state
+  window.scrollTo(0, 0);
+  currentSection = 0;
 
   // Fade out landing
   const landing = document.getElementById('landing');
