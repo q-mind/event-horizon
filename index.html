@@ -1299,39 +1299,7 @@ function drawSpace(t) {
 
   sCtx.restore();
 
-  // Atmosphere highlight arc (sun-facing side)
-  // Use clock's visual radius to match the clock ring position
-  const clockVisualSize = Math.min(sw, sh) * 0.95; // matches CSS min(95vw, 95vh)
-  const clockVisualR = clockVisualSize / 2 * (420 / 500); // R=420 in 1000px canvas = 420/500 of half-size
-  const atmAngle = Math.atan2(sunY - earthY, sunX - earthX);
-
-  sCtx.beginPath();
-  sCtx.arc(earthX, earthY, clockVisualR + 2, atmAngle - 0.8, atmAngle + 0.8);
-  sCtx.strokeStyle = 'rgba(100,160,255,0.08)';
-  sCtx.lineWidth = 4;
-  sCtx.stroke();
-
-  sCtx.beginPath();
-  sCtx.arc(earthX, earthY, clockVisualR + 1, atmAngle - 0.5, atmAngle + 0.5);
-  sCtx.strokeStyle = 'rgba(140,190,255,0.12)';
-  sCtx.lineWidth = 2;
-  sCtx.stroke();
-
-  // Atmosphere shrinking window
-  const launchYear = 2026;
-  const endYear = 2076;
-  const now = new Date();
-  const yearFraction = now.getFullYear() + (now.getMonth() / 12) + (now.getDate() / 365);
-  const windowPct = Math.max(0, Math.min(1, 1 - (yearFraction - launchYear) / (endYear - launchYear)));
-
-  const arcSpread = windowPct * 1.2;
-  if (arcSpread > 0.01) {
-    sCtx.beginPath();
-    sCtx.arc(earthX, earthY, clockVisualR + 5, atmAngle - arcSpread, atmAngle + arcSpread);
-    sCtx.strokeStyle = `rgba(80,140,255,${0.15 * windowPct})`;
-    sCtx.lineWidth = 6 * windowPct + 2;
-    sCtx.stroke();
-  }
+  // Atmosphere arcs moved to clock canvas (drawClock) so they align perfectly with the clock ring
 }
 
 // ═══════════════════════════════════════════
@@ -1594,6 +1562,38 @@ function drawClock(progress) {
   cCtx.arc(CX, CY, 6, 0, Math.PI * 2);
   cCtx.fillStyle = `rgba(${Math.min(255, cr + 60)},${Math.min(255, cg + 70)},${Math.min(255, cb + 70)},${0.8 * glowMult})`;
   cCtx.fill();
+
+  // 11. Atmosphere arcs (drawn on clock canvas so they align with the ring)
+  // Sun is upper-left relative to center — approximate angle
+  const atmSunAngle = Math.atan2(-CY * 0.8, -CX * 0.76); // toward upper-left
+
+  // Static highlight
+  cCtx.beginPath();
+  cCtx.arc(CX, CY, R + 4, atmSunAngle - 0.8, atmSunAngle + 0.8);
+  cCtx.strokeStyle = 'rgba(100,160,255,0.08)';
+  cCtx.lineWidth = 4;
+  cCtx.stroke();
+
+  cCtx.beginPath();
+  cCtx.arc(CX, CY, R + 2, atmSunAngle - 0.5, atmSunAngle + 0.5);
+  cCtx.strokeStyle = 'rgba(140,190,255,0.12)';
+  cCtx.lineWidth = 2;
+  cCtx.stroke();
+
+  // Shrinking window
+  const launchYear = 2026;
+  const endYear = 2076;
+  const nowDate = new Date();
+  const yearFraction = nowDate.getFullYear() + (nowDate.getMonth() / 12) + (nowDate.getDate() / 365);
+  const windowPct = Math.max(0, Math.min(1, 1 - (yearFraction - launchYear) / (endYear - launchYear)));
+  const arcSpread = windowPct * 1.2;
+  if (arcSpread > 0.01) {
+    cCtx.beginPath();
+    cCtx.arc(CX, CY, R + 8, atmSunAngle - arcSpread, atmSunAngle + arcSpread);
+    cCtx.strokeStyle = `rgba(80,140,255,${0.15 * windowPct})`;
+    cCtx.lineWidth = 6 * windowPct + 2;
+    cCtx.stroke();
+  }
 
   // Update shockwave
   if (shockwaveAlpha > 0.01) {
