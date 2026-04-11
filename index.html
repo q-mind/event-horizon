@@ -1657,32 +1657,35 @@ function drawClock(progress) {
   cCtx.fillStyle = `rgba(${Math.min(255, cr + 60)},${Math.min(255, cg + 70)},${Math.min(255, cb + 70)},${0.8 * glowMult})`;
   cCtx.fill();
 
-  // 11. Atmosphere arcs — shrinks with scroll progress
-  // progress 0 = 1990 (full atmosphere), progress 1 = 2076 (gone)
+  // 11. Atmosphere arc — shrinks from one end (clockwise, toward midnight)
+  // progress 0 = full arc, progress 1 = gone
   const atmSunAngle = Math.atan2(-CY * 0.8, -CX * 0.76);
-  const atmPct = Math.max(0, 1 - progress); // 1 at start, 0 at end
+  const fullSpread = 1.2; // max arc half-width in radians
+  const atmStart = atmSunAngle - fullSpread; // fixed start point
+  const atmEnd = atmSunAngle - fullSpread + (fullSpread * 2) * (1 - progress); // end retracts
 
-  if (atmPct > 0.01) {
-    // Decorative highlight — also shrinks
-    const highlightSpread = 0.8 * atmPct;
+  if (atmEnd > atmStart + 0.02) {
+    // Decorative outer glow
     cCtx.beginPath();
-    cCtx.arc(CX, CY, R + 4, atmSunAngle - highlightSpread, atmSunAngle + highlightSpread);
-    cCtx.strokeStyle = `rgba(100,160,255,${0.08 * atmPct})`;
+    cCtx.arc(CX, CY, R + 4, atmStart, atmEnd);
+    cCtx.strokeStyle = `rgba(100,160,255,${0.08 * (1 - progress)})`;
     cCtx.lineWidth = 4;
     cCtx.stroke();
 
+    // Inner highlight
+    const innerStart = atmStart + (atmEnd - atmStart) * 0.15;
+    const innerEnd = atmEnd - (atmEnd - atmStart) * 0.15;
     cCtx.beginPath();
-    cCtx.arc(CX, CY, R + 2, atmSunAngle - highlightSpread * 0.6, atmSunAngle + highlightSpread * 0.6);
-    cCtx.strokeStyle = `rgba(140,190,255,${0.12 * atmPct})`;
+    cCtx.arc(CX, CY, R + 2, innerStart, innerEnd);
+    cCtx.strokeStyle = `rgba(140,190,255,${0.12 * (1 - progress)})`;
     cCtx.lineWidth = 2;
     cCtx.stroke();
 
-    // Main shrinking window arc
-    const arcSpread = atmPct * 1.2;
+    // Main window arc
     cCtx.beginPath();
-    cCtx.arc(CX, CY, R + 8, atmSunAngle - arcSpread, atmSunAngle + arcSpread);
-    cCtx.strokeStyle = `rgba(80,140,255,${0.15 * atmPct})`;
-    cCtx.lineWidth = 6 * atmPct + 2;
+    cCtx.arc(CX, CY, R + 8, atmStart, atmEnd);
+    cCtx.strokeStyle = `rgba(80,140,255,${0.15 * (1 - progress)})`;
+    cCtx.lineWidth = 6 * (1 - progress) + 2;
     cCtx.stroke();
   }
 
@@ -1697,11 +1700,15 @@ function drawClock(progress) {
 // ═══════════════════════════════════════════
 // ANIMATION LOOP
 // ═══════════════════════════════════════════
+let displayProgress = 0; // smoothly follows target
+
 function animate(ts) {
   const t = ts / 1000;
   drawSpace(t);
-  const progress = currentSection / (totalSections - 1);
-  drawClock(progress);
+  const targetProgress = currentSection / (totalSections - 1);
+  // Ease toward target for smooth atmosphere/degradation transitions
+  displayProgress += (targetProgress - displayProgress) * 0.08;
+  drawClock(displayProgress);
   requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
