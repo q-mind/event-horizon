@@ -884,13 +884,21 @@ let reverbBuffer = null;
 let tickSampleBuffer = null;
 let useMP3 = false;
 
-async function initAudio() {
-  if (audioCtx) {
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    return;
+// Pre-create AudioContext synchronously on first touch (required for iOS Safari)
+function ensureAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+// Must be called inside a synchronous user gesture handler
+['touchstart', 'mousedown', 'keydown'].forEach(evt => {
+  document.addEventListener(evt, ensureAudioCtx, { once: true });
+});
+
+async function initAudio() {
+  ensureAudioCtx();
+  if (reverbBuffer) return; // already initialized
 
   const rate = audioCtx.sampleRate;
   const length = Math.floor(rate * 3.5);
@@ -1292,15 +1300,19 @@ function drawSpace(t) {
   sCtx.restore();
 
   // Atmosphere highlight arc (sun-facing side)
+  // Use clock's visual radius to match the clock ring position
+  const clockVisualSize = Math.min(sw, sh) * 0.95; // matches CSS min(95vw, 95vh)
+  const clockVisualR = clockVisualSize / 2 * (420 / 500); // R=420 in 1000px canvas = 420/500 of half-size
   const atmAngle = Math.atan2(sunY - earthY, sunX - earthX);
+
   sCtx.beginPath();
-  sCtx.arc(earthX, earthY, earthR + 2, atmAngle - 0.8, atmAngle + 0.8);
+  sCtx.arc(earthX, earthY, clockVisualR + 2, atmAngle - 0.8, atmAngle + 0.8);
   sCtx.strokeStyle = 'rgba(100,160,255,0.08)';
   sCtx.lineWidth = 4;
   sCtx.stroke();
 
   sCtx.beginPath();
-  sCtx.arc(earthX, earthY, earthR + 1, atmAngle - 0.5, atmAngle + 0.5);
+  sCtx.arc(earthX, earthY, clockVisualR + 1, atmAngle - 0.5, atmAngle + 0.5);
   sCtx.strokeStyle = 'rgba(140,190,255,0.12)';
   sCtx.lineWidth = 2;
   sCtx.stroke();
@@ -1312,11 +1324,10 @@ function drawSpace(t) {
   const yearFraction = now.getFullYear() + (now.getMonth() / 12) + (now.getDate() / 365);
   const windowPct = Math.max(0, Math.min(1, 1 - (yearFraction - launchYear) / (endYear - launchYear)));
 
-  // Draw as thicker blue arc on sun-facing side, width proportional to windowPct
-  const arcSpread = windowPct * 1.2; // max spread 1.2 radians each side
+  const arcSpread = windowPct * 1.2;
   if (arcSpread > 0.01) {
     sCtx.beginPath();
-    sCtx.arc(earthX, earthY, earthR + 5, atmAngle - arcSpread, atmAngle + arcSpread);
+    sCtx.arc(earthX, earthY, clockVisualR + 5, atmAngle - arcSpread, atmAngle + arcSpread);
     sCtx.strokeStyle = `rgba(80,140,255,${0.15 * windowPct})`;
     sCtx.lineWidth = 6 * windowPct + 2;
     sCtx.stroke();
