@@ -884,22 +884,17 @@ let reverbBuffer = null;
 let tickSampleBuffer = null;
 let useMP3 = false;
 
-// Pre-create AudioContext synchronously on first touch (required for iOS Safari)
-function ensureAudioCtx() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+// Create AudioContext + build reverb synchronously on first gesture (iOS Safari requirement)
+let audioReady = false;
+function initAudioSync() {
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return;
   }
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === 'suspended') audioCtx.resume();
-}
-// Must be called inside a synchronous user gesture handler
-['touchstart', 'mousedown', 'keydown'].forEach(evt => {
-  document.addEventListener(evt, ensureAudioCtx, { once: true });
-});
 
-async function initAudio() {
-  ensureAudioCtx();
-  if (reverbBuffer) return; // already initialized
-
+  // Build reverb impulse immediately (synchronous, ~50ms)
   const rate = audioCtx.sampleRate;
   const length = Math.floor(rate * 3.5);
   const impulse = audioCtx.createBuffer(2, length, rate);
@@ -907,40 +902,58 @@ async function initAudio() {
     const data = impulse.getChannelData(ch);
     for (let i = 0; i < length; i++) {
       const t = i / length;
-      const earlyDecay = Math.exp(-t * 8) * 0.6;
-      const lateDecay = Math.exp(-t * 2.5) * 0.4;
-      data[i] = (Math.random() * 2 - 1) * (earlyDecay + lateDecay);
+      data[i] = (Math.random() * 2 - 1) * (Math.exp(-t * 8) * 0.6 + Math.exp(-t * 2.5) * 0.4);
     }
   }
   reverbBuffer = impulse;
+  audioReady = true;
 
-  try {
-    const resp = await fetch('tick.mp3');
-    if (resp.ok) {
-      const buf = await resp.arrayBuffer();
-      const decoded = await audioCtx.decodeAudioData(buf);
-      // Extract one tick: 7s to 8.2s (with reverb tail fade-out)
-      const rate = decoded.sampleRate;
-      const start = Math.floor(rate * 7);
-      const end = Math.floor(rate * 8.2);
-      tickSampleBuffer = audioCtx.createBuffer(decoded.numberOfChannels, end - start, rate);
-      for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-        const src = decoded.getChannelData(ch);
-        const dst = tickSampleBuffer.getChannelData(ch);
-        for (let i = 0; i < dst.length; i++) {
-          const fadeStart = dst.length - Math.floor(rate * 0.3);
-          const fade = i > fadeStart ? 1 - (i - fadeStart) / (dst.length - fadeStart) : 1;
-          dst[i] = src[start + i] * fade;
-        }
+  // Play a silent buffer to unlock audio on iOS
+  const silentBuf = audioCtx.createBuffer(1, 1, rate);
+  const silentSrc = audioCtx.createBufferSource();
+  silentSrc.buffer = silentBuf;
+  silentSrc.connect(audioCtx.destination);
+  silentSrc.start();
+}
+// Attach to gesture events — must be synchronous, not async
+['touchstart', 'mousedown', 'keydown'].forEach(evt => {
+  document.addEventListener(evt, initAudioSync, { once: true });
+});
+
+// Try loading MP3 in background (non-blocking, for production server)
+function tryLoadMP3() {
+  if (!audioCtx || useMP3) return;
+  fetch('tick.mp3').then(resp => {
+    if (!resp.ok) return;
+    return resp.arrayBuffer();
+  }).then(buf => {
+    if (!buf) return;
+    return audioCtx.decodeAudioData(buf);
+  }).then(decoded => {
+    if (!decoded) return;
+    const rate = decoded.sampleRate;
+    const start = Math.floor(rate * 7);
+    const end = Math.floor(rate * 8.2);
+    tickSampleBuffer = audioCtx.createBuffer(decoded.numberOfChannels, end - start, rate);
+    for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+      const src = decoded.getChannelData(ch);
+      const dst = tickSampleBuffer.getChannelData(ch);
+      for (let i = 0; i < dst.length; i++) {
+        const fadeStart = dst.length - Math.floor(rate * 0.3);
+        const fade = i > fadeStart ? 1 - (i - fadeStart) / (dst.length - fadeStart) : 1;
+        dst[i] = src[start + i] * fade;
       }
-      useMP3 = true;
     }
-  } catch(e) { /* fall back to synth */ }
+    useMP3 = true;
+  }).catch(() => {});
 }
 
-async function playTick() {
-  await initAudio();
-  if (!audioCtx) return;
+function playTick() {
+  if (!audioReady) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  // Try loading MP3 in background on first play
+  if (!useMP3 && !tickSampleBuffer) tryLoadMP3();
 
   if (useMP3 && tickSampleBuffer) {
     const src = audioCtx.createBufferSource();
@@ -1055,13 +1068,7 @@ async function playTick() {
   }, 5000);
 }
 
-// Init audio on first interaction
-['wheel', 'keydown', 'touchstart'].forEach(evt => {
-  window.addEventListener(evt, function audioInit() {
-    initAudio();
-    window.removeEventListener(evt, audioInit);
-  }, { once: true });
-});
+// Audio is initialized synchronously via initAudioSync on first gesture
 
 // ═══════════════════════════════════════════
 // CLOCK MATH
