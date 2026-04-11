@@ -916,7 +916,7 @@ function initAudioSync() {
   silentSrc.start();
 }
 // Attach to gesture events — must be synchronous, not async
-['touchstart', 'mousedown', 'keydown'].forEach(evt => {
+['touchstart', 'mousedown', 'keydown', 'wheel'].forEach(evt => {
   document.addEventListener(evt, initAudioSync, { once: true });
 });
 
@@ -949,8 +949,8 @@ function tryLoadMP3() {
 }
 
 function playTick() {
+  initAudioSync(); // ensure audio is ready (idempotent)
   if (!audioReady) return;
-  if (audioCtx.state === 'suspended') audioCtx.resume();
 
   // Try loading MP3 in background on first play
   if (!useMP3 && !tickSampleBuffer) tryLoadMP3();
