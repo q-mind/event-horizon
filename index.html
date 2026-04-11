@@ -317,6 +317,27 @@
     transition: opacity 1s;
     pointer-events: none;
   }
+
+  .audio-prompt {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    color: rgba(160,120,60,0.5);
+    z-index: 100;
+    cursor: pointer;
+    padding: 10px 20px;
+    border: 1px solid rgba(160,120,60,0.2);
+    border-radius: 4px;
+    background: rgba(6,6,6,0.8);
+    transition: opacity 0.5s;
+  }
+  .audio-prompt:hover {
+    color: rgba(160,120,60,0.8);
+    border-color: rgba(160,120,60,0.4);
+  }
 </style>
 </head>
 <body>
@@ -915,9 +936,14 @@ function initAudioSync() {
   silentSrc.connect(audioCtx.destination);
   silentSrc.start();
 }
-// Attach to gesture events — must be synchronous, not async
-['touchstart', 'mousedown', 'keydown', 'wheel'].forEach(evt => {
-  document.addEventListener(evt, initAudioSync, { once: true });
+// Attach to user activation events (wheel is NOT a user activation event in browsers)
+['touchstart', 'mousedown', 'keydown'].forEach(evt => {
+  document.addEventListener(evt, () => {
+    initAudioSync();
+    // Hide audio prompt if visible
+    const p = document.querySelector('.audio-prompt');
+    if (p) { p.style.opacity = '0'; setTimeout(() => p.remove(), 500); }
+  }, { once: true });
 });
 
 // Try loading MP3 in background (non-blocking, for production server)
@@ -1080,9 +1106,29 @@ function minuteToAngle(m) {
 // ═══════════════════════════════════════════
 // SCROLL / NAVIGATION
 // ═══════════════════════════════════════════
+// Audio prompt — shown if user scrolls before clicking
+let audioPromptShown = false;
+function showAudioPrompt() {
+  if (audioPromptShown || audioReady) return;
+  audioPromptShown = true;
+  const prompt = document.createElement('div');
+  prompt.className = 'audio-prompt';
+  prompt.textContent = 'click for sound';
+  prompt.addEventListener('click', () => {
+    initAudioSync();
+    playTick();
+    prompt.style.opacity = '0';
+    setTimeout(() => prompt.remove(), 500);
+  });
+  document.body.appendChild(prompt);
+}
+
 function scrollToSection(idx) {
   const hint = document.getElementById('scrollHint');
   if (hint) hint.style.opacity = '0';
+
+  // Show audio prompt if audio not yet initialized
+  if (!audioReady) showAudioPrompt();
 
   if (idx < 0 || idx >= totalSections) return;
   if (scrollLocked) return;
